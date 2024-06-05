@@ -1,329 +1,286 @@
-import { useEffect } from "react";
+import { useState, useEffect } from "react";
 import { json } from "@remix-run/node";
-import { useActionData, useNavigation, useSubmit } from "@remix-run/react";
+import { useActionData, useLoaderData, Form } from "@remix-run/react";
+
 import {
   Page,
   Layout,
-  Text,
-  Card,
+  ButtonGroup,
   Button,
   BlockStack,
-  Box,
-  List,
-  Link,
-  InlineStack,
+  TextField,
+  Checkbox
 } from "@shopify/polaris";
-import { TitleBar, useAppBridge } from "@shopify/app-bridge-react";
 import { authenticate } from "../shopify.server";
+import TierTabs from "./src/tierTabs/TierTabs";
+import compareObjects from '../helpers/compareObjects';
+import db from '../db.server'
 
-export const loader = async ({ request }) => {
+export const loader = async () => {
+  let appData = await db.appData.findFirst({ 
+    include: {
+      generalSettings: true,
+      tier1: true,
+      tier2: true,
+      tier3: true
+    }
+  });
+  return json(appData);  
+};
+
+export const action = async ({ request }) => {
   await authenticate.admin(request);
+  let allFormData = await request.formData();
+  allFormData = Object.fromEntries(allFormData);
+
+  const {
+    gs_giftCodes, 
+    gs_heading, 
+    gs_subHeading, 
+    gs_selectError, 
+    gs_cancelButton, 
+    gs_addButton, 
+    gs_enableProgressBar,
+    t1_CAD,
+    t1_GBP,
+    t1_USD,
+    t1_products,
+    t2_enabled,
+    t2_CAD,
+    t2_GBP,
+    t2_USD,
+    t2_products,
+    t3_enabled,
+    t3_CAD,
+    t3_GBP,
+    t3_USD,
+    t3_products
+  } = allFormData;
+
+  // Update GeneralSettings Table
+  await db.generalSettings.upsert({
+    where: {
+      id: 1
+    },
+    update: {
+      giftCodes: gs_giftCodes,
+      heading: gs_heading,
+      subHeading: gs_subHeading,
+      selectError: gs_selectError,
+      cancelButton: gs_cancelButton,
+      addButton: gs_addButton,
+      enableProgressBar: Boolean(gs_enableProgressBar)
+    },
+    create: {
+      giftCodes: gs_giftCodes,
+      heading: gs_heading,
+      subHeading: gs_subHeading,
+      selectError: gs_selectError,
+      cancelButton: gs_cancelButton,
+      addButton: gs_addButton,
+      enableProgressBar: Boolean(gs_enableProgressBar)
+    }
+  })
+
+  // Update Tier Tables
+  await db.tier1.upsert({
+    where: {
+      id: 1
+    },
+    update: {
+      CAD: parseInt(t1_CAD),
+      GBP: parseInt(t1_GBP),
+      USD: parseInt(t1_USD),
+      products: t1_products
+    },
+    create: {
+      CAD: parseInt(t1_CAD),
+      GBP: parseInt(t1_GBP),
+      USD: parseInt(t1_USD),
+      products: t1_products
+    }
+  })
+
+  await db.tier2.upsert({
+    where: {
+      id: 1
+    },
+    update: {
+      enabled: Boolean(t2_enabled),
+      CAD: parseInt(t2_CAD),
+      GBP: parseInt(t2_GBP),
+      USD: parseInt(t2_USD),
+      products: t2_products
+    },
+    create: {
+      enabled: Boolean(t2_enabled),
+      CAD: parseInt(t2_CAD),
+      GBP: parseInt(t2_GBP),
+      USD: parseInt(t2_USD),
+      products: t2_products
+    }
+  })
+
+  await db.tier3.upsert({
+    where: {
+      id: 1
+    },
+    update: {
+      enabled: Boolean(t3_enabled),
+      CAD: parseInt(t3_CAD),
+      GBP: parseInt(t3_GBP),
+      USD: parseInt(t3_USD),
+      products: t3_products
+    },
+    create: {
+      enabled: Boolean(t3_enabled),
+      CAD: parseInt(t3_CAD),
+      GBP: parseInt(t3_GBP),
+      USD: parseInt(t3_USD),
+      products: t3_products
+    }
+  })
 
   return null;
 };
 
-export const action = async ({ request }) => {
-  const { admin } = await authenticate.admin(request);
-  const color = ["Red", "Orange", "Yellow", "Green"][
-    Math.floor(Math.random() * 4)
-  ];
-  const response = await admin.graphql(
-    `#graphql
-      mutation populateProduct($input: ProductInput!) {
-        productCreate(input: $input) {
-          product {
-            id
-            title
-            handle
-            status
-            variants(first: 10) {
-              edges {
-                node {
-                  id
-                  price
-                  barcode
-                  createdAt
-                }
-              }
-            }
-          }
-        }
-      }`,
-    {
-      variables: {
-        input: {
-          title: `${color} Snowboard`,
-        },
-      },
-    },
-  );
-  const responseJson = await response.json();
-  const variantId =
-    responseJson.data.productCreate.product.variants.edges[0].node.id;
-  const variantResponse = await admin.graphql(
-    `#graphql
-      mutation shopifyRemixTemplateUpdateVariant($input: ProductVariantInput!) {
-        productVariantUpdate(input: $input) {
-          productVariant {
-            id
-            price
-            barcode
-            createdAt
-          }
-        }
-      }`,
-    {
-      variables: {
-        input: {
-          id: variantId,
-          price: Math.random() * 100,
-        },
-      },
-    },
-  );
-  const variantResponseJson = await variantResponse.json();
-
-  return json({
-    product: responseJson.data.productCreate.product,
-    variant: variantResponseJson.data.productVariantUpdate.productVariant,
-  });
-};
-
 export default function Index() {
-  const nav = useNavigation();
-  const actionData = useActionData();
-  const submit = useSubmit();
-  const shopify = useAppBridge();
-  const isLoading =
-    ["loading", "submitting"].includes(nav.state) && nav.formMethod === "POST";
-  const productId = actionData?.product?.id.replace(
-    "gid://shopify/Product/",
-    "",
-  );
+  const appData = useLoaderData();
+  const updatedAppData = useActionData();
+  const [saveState, setSaveState] = useState(true);
+  const { generalSettings, tier1, tier2, tier3 } = appData;
+
+  const [generalSettingsConfig, setGeneralSettingsConfig] = useState({
+    giftCodes: generalSettings.giftCodes,
+    heading: generalSettings.heading,
+    subHeading: generalSettings.subHeading,
+    selectError: generalSettings.selectError,
+    cancelButton: generalSettings.cancelButton,
+    addButton: generalSettings.addButton,
+    enableProgressBar: generalSettings.enableProgressBar
+  })
+
+  const [tier1Data, setTier1Data] = useState({
+    CAD: tier1.CAD,
+    GBP: tier1.GBP,
+    USD: tier1.USD,    
+    products: tier1.products ? JSON.parse(tier1.products) : []
+  });
+
+  const [tier2Data, setTier2Data] = useState({
+    enabled: tier2.enabled,
+    CAD: tier2.CAD,
+    GBP: tier2.GBP,
+    USD: tier2.USD,   
+    products: tier2.products ? JSON.parse(tier2.products) : []
+  });
+
+  const [tier3Data, setTier3Data] = useState({
+    enabled: tier3.enabled,
+    CAD: tier3.CAD,
+    GBP: tier3.GBP,
+    USD: tier3.USD,   
+    products: tier3.products ? JSON.parse(tier3.products) : []
+  });
 
   useEffect(() => {
-    if (productId) {
-      shopify.toast.show("Product created");
+    const {generalSettings, tier1, tier2, tier3} = appData;
+    const saveStates = [];
+    const checkTierSaveState = (stateTierData, appTierData) => {
+      let tempAppTier = {...appTierData}
+      tempAppTier.products = JSON.parse(tempAppTier.products);
+      return compareObjects(stateTierData,tempAppTier)
     }
-  }, [productId, shopify]);
-  const generateProduct = () => submit({}, { replace: true, method: "POST" });
+
+    saveStates.push(checkTierSaveState(tier1Data,tier1));
+    saveStates.push(checkTierSaveState(tier2Data,tier2));
+    saveStates.push(checkTierSaveState(tier3Data,tier3));
+    saveStates.push(compareObjects(generalSettingsConfig, generalSettings));
+
+    if(saveStates.includes(false)){
+      setSaveState(false)
+    } else {
+      setSaveState(true)
+    }
+  },[generalSettingsConfig, tier1Data, tier2Data, tier3Data])
+
+  const handleSave = () => {
+    const saveAppDataButton = document.getElementById('saveAppData');
+    if(saveAppDataButton) {
+      saveAppDataButton.click();
+      setSaveState(true);
+    }
+  }
+
+  const handleReset = () => location.reload();
+
+  const displayFormData = (dataObj, name) => {
+    let formInputs = Object.keys(dataObj).map(key => {
+      if(typeof dataObj[key] === 'boolean'){
+        return <Checkbox
+          key={`display-form-data_${key}`}
+          name={`${name}_${key}`}
+          type={typeof dataObj[key]}
+          checked={dataObj[key]}
+          value={dataObj[key]}
+        />
+      } else if(typeof dataObj[key] === 'object'){
+        return <TextField
+          key={`display-form-data_${key}`}
+          name={`${name}_${key}`}
+          type={typeof dataObj[key]}
+          value={JSON.stringify(dataObj[key])}
+          autoComplete="off"
+        />
+      } else {
+        return <TextField
+          key={`display-form-data_${key}`}
+          name={`${name}_${key}`}
+          type={typeof dataObj[key]}
+          value={dataObj[key]}
+          autoComplete="off"
+        />
+      }
+    })
+    return formInputs;
+  }
+
+  const renderGeneralSettingsForm = displayFormData(generalSettingsConfig,'gs');
+  const renderTier1Form = displayFormData(tier1Data,'t1');
+  const renderTier2Form = displayFormData(tier2Data,'t2');
+  const renderTier3Form = displayFormData(tier3Data,'t3');
 
   return (
     <Page>
-      <TitleBar title="Remix app template">
-        <button variant="primary" onClick={generateProduct}>
-          Generate a product
-        </button>
-      </TitleBar>
       <BlockStack gap="500">
         <Layout>
           <Layout.Section>
-            <Card>
-              <BlockStack gap="500">
-                <BlockStack gap="200">
-                  <Text as="h2" variant="headingMd">
-                    Congrats on creating a new Shopify app 🎉
-                  </Text>
-                  <Text variant="bodyMd" as="p">
-                    This embedded app template uses{" "}
-                    <Link
-                      url="https://shopify.dev/docs/apps/tools/app-bridge"
-                      target="_blank"
-                      removeUnderline
-                    >
-                      App Bridge
-                    </Link>{" "}
-                    interface examples like an{" "}
-                    <Link url="/app/additional" removeUnderline>
-                      additional page in the app nav
-                    </Link>
-                    , as well as an{" "}
-                    <Link
-                      url="https://shopify.dev/docs/api/admin-graphql"
-                      target="_blank"
-                      removeUnderline
-                    >
-                      Admin GraphQL
-                    </Link>{" "}
-                    mutation demo, to provide a starting point for app
-                    development.
-                  </Text>
-                </BlockStack>
-                <BlockStack gap="200">
-                  <Text as="h3" variant="headingMd">
-                    Get started with products
-                  </Text>
-                  <Text as="p" variant="bodyMd">
-                    Generate a product with GraphQL and get the JSON output for
-                    that product. Learn more about the{" "}
-                    <Link
-                      url="https://shopify.dev/docs/api/admin-graphql/latest/mutations/productCreate"
-                      target="_blank"
-                      removeUnderline
-                    >
-                      productCreate
-                    </Link>{" "}
-                    mutation in our API references.
-                  </Text>
-                </BlockStack>
-                <InlineStack gap="300">
-                  <Button loading={isLoading} onClick={generateProduct}>
-                    Generate a product
-                  </Button>
-                  {actionData?.product && (
-                    <Button
-                      url={`shopify:admin/products/${productId}`}
-                      target="_blank"
-                      variant="plain"
-                    >
-                      View product
-                    </Button>
-                  )}
-                </InlineStack>
-                {actionData?.product && (
-                  <>
-                    <Text as="h3" variant="headingMd">
-                      {" "}
-                      productCreate mutation
-                    </Text>
-                    <Box
-                      padding="400"
-                      background="bg-surface-active"
-                      borderWidth="025"
-                      borderRadius="200"
-                      borderColor="border"
-                      overflowX="scroll"
-                    >
-                      <pre style={{ margin: 0 }}>
-                        <code>
-                          {JSON.stringify(actionData.product, null, 2)}
-                        </code>
-                      </pre>
-                    </Box>
-                    <Text as="h3" variant="headingMd">
-                      {" "}
-                      productVariantUpdate mutation
-                    </Text>
-                    <Box
-                      padding="400"
-                      background="bg-surface-active"
-                      borderWidth="025"
-                      borderRadius="200"
-                      borderColor="border"
-                      overflowX="scroll"
-                    >
-                      <pre style={{ margin: 0 }}>
-                        <code>
-                          {JSON.stringify(actionData.variant, null, 2)}
-                        </code>
-                      </pre>
-                    </Box>
-                  </>
-                )}
-              </BlockStack>
-            </Card>
+            <TierTabs 
+              appData={updatedAppData ? updatedAppData : appData} 
+              generalSettingsConfig={generalSettingsConfig}
+              setGeneralSettingsConfig={setGeneralSettingsConfig}
+              tier1Data={tier1Data}
+              setTier1Data={setTier1Data}
+              tier2Data={tier2Data}
+              setTier2Data={setTier2Data}
+              tier3Data={tier3Data}
+              setTier3Data={setTier3Data}
+            />
+            <div style={{display:"none"}}>
+              <Form method="POST">
+                {renderGeneralSettingsForm}
+                {renderTier1Form}
+                {renderTier2Form}
+                {renderTier3Form}
+                <button id="saveAppData" style={{display:'none'}} submit="true">Save</button>
+              </Form>
+            </div>
           </Layout.Section>
-          <Layout.Section variant="oneThird">
-            <BlockStack gap="500">
-              <Card>
-                <BlockStack gap="200">
-                  <Text as="h2" variant="headingMd">
-                    App template specs
-                  </Text>
-                  <BlockStack gap="200">
-                    <InlineStack align="space-between">
-                      <Text as="span" variant="bodyMd">
-                        Framework
-                      </Text>
-                      <Link
-                        url="https://remix.run"
-                        target="_blank"
-                        removeUnderline
-                      >
-                        Remix
-                      </Link>
-                    </InlineStack>
-                    <InlineStack align="space-between">
-                      <Text as="span" variant="bodyMd">
-                        Database
-                      </Text>
-                      <Link
-                        url="https://www.prisma.io/"
-                        target="_blank"
-                        removeUnderline
-                      >
-                        Prisma
-                      </Link>
-                    </InlineStack>
-                    <InlineStack align="space-between">
-                      <Text as="span" variant="bodyMd">
-                        Interface
-                      </Text>
-                      <span>
-                        <Link
-                          url="https://polaris.shopify.com"
-                          target="_blank"
-                          removeUnderline
-                        >
-                          Polaris
-                        </Link>
-                        {", "}
-                        <Link
-                          url="https://shopify.dev/docs/apps/tools/app-bridge"
-                          target="_blank"
-                          removeUnderline
-                        >
-                          App Bridge
-                        </Link>
-                      </span>
-                    </InlineStack>
-                    <InlineStack align="space-between">
-                      <Text as="span" variant="bodyMd">
-                        API
-                      </Text>
-                      <Link
-                        url="https://shopify.dev/docs/api/admin-graphql"
-                        target="_blank"
-                        removeUnderline
-                      >
-                        GraphQL API
-                      </Link>
-                    </InlineStack>
-                  </BlockStack>
-                </BlockStack>
-              </Card>
-              <Card>
-                <BlockStack gap="200">
-                  <Text as="h2" variant="headingMd">
-                    Next steps
-                  </Text>
-                  <List>
-                    <List.Item>
-                      Build an{" "}
-                      <Link
-                        url="https://shopify.dev/docs/apps/getting-started/build-app-example"
-                        target="_blank"
-                        removeUnderline
-                      >
-                        {" "}
-                        example app
-                      </Link>{" "}
-                      to get started
-                    </List.Item>
-                    <List.Item>
-                      Explore Shopify’s API with{" "}
-                      <Link
-                        url="https://shopify.dev/docs/apps/tools/graphiql-admin-api"
-                        target="_blank"
-                        removeUnderline
-                      >
-                        GraphiQL
-                      </Link>
-                    </List.Item>
-                  </List>
-                </BlockStack>
-              </Card>
-            </BlockStack>
+          <Layout.Section>
+            <ButtonGroup>
+              <Button onClick={handleReset} disabled={saveState}>Reset</Button>
+              <Button variant="primary" disabled={saveState} onClick={handleSave}>Save</Button>
+            </ButtonGroup>
           </Layout.Section>
         </Layout>
       </BlockStack>

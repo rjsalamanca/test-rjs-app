@@ -1,0 +1,62 @@
+.content > * {
+    padding-bottom: 10px;
+}
+
+.tabHeading {
+    padding-bottom:20px;
+}
+
+.productContainer {
+    width: 400px;
+    display: flex;
+    padding: 20px;
+    margin: 20px auto;
+    border-radius: 5px;
+    background-color: lightgray;
+    
+}
+
+.productContainer .Polaris-Thumbnail {
+    margin-right: 20px;
+}
+.productContainer .Polaris-Thumbnail img {
+    height: 100%;
+    width: 100%;
+}
+
+.productContainer .Polaris-Button {
+    margin-top: 20px
+}
+
+.productImageDropZone .Polaris-Thumbnail--sizeLarge{
+    width: 100%;
+    height: 100%;  
+}
+
+.productImageDropZone .Polaris-Thumbnail img{
+    max-width: 100%;
+    max-height: 100%;
+    width: 100%;
+    height: 100%;
+}
+
+.productContent {
+    padding: 20px 0;
+}
+
+.customProductSection {
+    border-top: 1px dashed lightgray;
+    padding-top:20px;
+}
+
+.customSectionHeading {
+    padding-bottom: 20px;
+}
+
+.customSectionHeading > * {
+    text-align: center;
+}
+
+.dropZoneContainer > .Polaris-Text--root {
+    padding-bottom: 5px;
+}
